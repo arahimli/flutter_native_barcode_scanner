@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -39,15 +40,16 @@ class BarcodeScannerWidget extends StatefulWidget {
 
   const BarcodeScannerWidget(
       {Key? key,
-        this.cameraSelector = CameraSelector.back,
-        this.startScanning = true,
-        this.stopScanOnBarcodeDetected = true,
-        this.orientation = CameraOrientation.portrait,
-        this.scannerType = ScannerType.barcode,
-        this.onBarcodeDetected,
-        this.onTextDetected,
-        required this.onError})
-      : assert(onBarcodeDetected != null || onTextDetected != null), super(key: key);
+      this.cameraSelector = CameraSelector.back,
+      this.startScanning = true,
+      this.stopScanOnBarcodeDetected = true,
+      this.orientation = CameraOrientation.portrait,
+      this.scannerType = ScannerType.barcode,
+      this.onBarcodeDetected,
+      this.onTextDetected,
+      required this.onError})
+      : assert(onBarcodeDetected != null || onTextDetected != null),
+        super(key: key);
 
   @override
   State<BarcodeScannerWidget> createState() => _BarcodeScannerWidgetState();
@@ -56,9 +58,10 @@ class BarcodeScannerWidget extends StatefulWidget {
 class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
   static const String platformViewChannel = 'be.freedelity/native_scanner/view';
   static const EventChannel eventChannel =
-  EventChannel('be.freedelity/native_scanner/imageStream');
+      EventChannel('be.freedelity/native_scanner/imageStream');
 
   late Map<String, dynamic> creationParams;
+  late StreamSubscription subscription;
 
   @override
   void initState() {
@@ -71,19 +74,23 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
       'start_scanning': widget.startScanning,
     };
 
-    eventChannel.receiveBroadcastStream().listen((dynamic event) async {
-      if (widget.onBarcodeDetected != null && widget.scannerType == ScannerType.barcode) {
+    subscription =
+        eventChannel.receiveBroadcastStream().listen((dynamic event) async {
+      if (widget.onBarcodeDetected != null &&
+          widget.scannerType == ScannerType.barcode) {
         final format = BarcodeFormat.unserialize(event['format']);
         if (format != null) {
           await BarcodeScanner.stopScanner();
 
-          await widget.onBarcodeDetected!(Barcode(format: format, value: event['barcode'] as String));
+          await widget.onBarcodeDetected!(
+              Barcode(format: format, value: event['barcode'] as String));
 
           if (!widget.stopScanOnBarcodeDetected) {
             BarcodeScanner.startScanner();
           }
         }
-      } else if (widget.onTextDetected != null && widget.scannerType != ScannerType.barcode) {
+      } else if (widget.onTextDetected != null &&
+          widget.scannerType != ScannerType.barcode) {
         if (widget.scannerType == ScannerType.mrz) {
           await BarcodeScanner.stopScanner();
           await widget.onTextDetected!(event['mrz'] as String);
@@ -132,5 +139,11 @@ class _BarcodeScannerWidgetState extends State<BarcodeScannerWidget> {
       const Positioned.fill(
           child: ModalBarrier(dismissible: false, color: Colors.transparent))
     ]);
+  }
+
+  @override
+  void dispose() {
+    subscription.cancel();
+    super.dispose();
   }
 }
